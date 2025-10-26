@@ -44,15 +44,24 @@ cd cliproxyapi-installer
    ```
 
 3. **Start the service**:
-   ```bash
-   # Direct execution
-   ./cli-proxy-api
+    ```bash
+    # Direct execution
+    ./cli-proxy-api
 
-   # Or as a systemd service
-   systemctl --user enable cliproxyapi.service
-   systemctl --user start cliproxyapi.service
-   systemctl --user status cliproxyapi.service
-   ```
+    # Or as a systemd service
+    systemctl --user enable cliproxyapi.service
+    systemctl --user start cliproxyapi.service
+    systemctl --user status cliproxyapi.service
+    ```
+
+4. **Enable autostart on boot** (recommended):
+    ```bash
+    # Enable the service to start automatically on user login
+    systemctl --user enable cliproxyapi.service
+    
+    # Verify it's enabled
+    systemctl --user is-enabled cliproxyapi.service
+    ```
 
 ## Usage
 
@@ -160,6 +169,8 @@ sudo dnf install curl wget tar
 
 The installer creates a systemd service file for easy management:
 
+### Basic Service Management
+
 ```bash
 # Enable the service (starts on boot)
 systemctl --user enable cliproxyapi.service
@@ -177,38 +188,104 @@ journalctl --user -u cliproxyapi.service -f
 systemctl --user stop cliproxyapi.service
 ```
 
+### Autostart Configuration
+
+**To enable CLIProxyAPI to start automatically on system boot:**
+
+```bash
+# Enable the service for automatic startup on user login
+systemctl --user enable cliproxyapi.service
+
+# Verify the service is enabled
+systemctl --user is-enabled cliproxyapi.service
+
+# Check if the service will start on boot
+systemctl --user is-active cliproxyapi.service
+```
+
+**To disable autostart:**
+```bash
+systemctl --user disable cliproxyapi.service
+```
+
+**Important Notes:**
+- The `--user` flag means the service runs as your user and starts when you log in
+- For system-wide startup (requires root), you would need to manually install the service file to `/etc/systemd/system/`
+- User services require lingering to be enabled for startup without login: `loginctl enable-linger $USER`
+
+**If the service is not working:**
+```bash
+# Reload systemd daemon
+systemctl --user daemon-reload
+
+# Check service status for errors
+systemctl --user status cliproxyapi.service
+
+# View detailed logs
+journalctl --user -u cliproxyapi.service -n 50
+
+# Check if service file exists
+ls -la ~/.config/systemd/user/cliproxyapi.service
+```
+
 ## Troubleshooting
 
 ### Common Issues
 
 1. **Permission Denied**
-   ```bash
-   chmod +x cliproxyapi-installer
-   ```
+    ```bash
+    chmod +x cliproxyapi-installer
+    ```
 
 2. **Missing Dependencies**
-   ```bash
-   # Check what's missing
-   ./cliproxyapi-installer status
-   
-   # Install required tools
-   sudo apt-get install curl wget tar  # Ubuntu/Debian
-   ```
+    ```bash
+    # Check what's missing
+    ./cliproxyapi-installer status
+    
+    # Install required tools
+    sudo apt-get install curl wget tar  # Ubuntu/Debian
+    ```
 
 3. **API Keys Not Configured**
-   ```bash
-   ./cliproxyapi-installer check-config
-   # Follow the instructions to configure API keys
-   ```
+    ```bash
+    ./cliproxyapi-installer check-config
+    # Follow the instructions to configure API keys
+    ```
 
 4. **Service Won't Start**
-   ```bash
-   # Check service logs
-   journalctl --user -u cliproxyapi.service -n 50
-   
-   # Check configuration
-   ./cliproxyapi-installer check-config
-   ```
+    ```bash
+    # Check service logs
+    journalctl --user -u cliproxyapi.service -n 50
+    
+    # Check configuration
+    ./cliproxyapi-installer check-config
+    ```
+
+5. **Port Already in Use**
+    ```bash
+    # Check what's using port 8317
+    netstat -tlnp | grep 8317
+    
+    # Stop the existing process
+    pkill cli-proxy-api
+    
+    # Then restart the service
+    systemctl --user restart cliproxyapi.service
+    ```
+
+6. **Systemd Service Issues**
+    ```bash
+    # Reload systemd daemon
+    systemctl --user daemon-reload
+    
+    # Check if service file exists
+    ls -la ~/.config/systemd/user/cliproxyapi.service
+    
+    # Reset service (disable and re-enable)
+    systemctl --user disable cliproxyapi.service
+    systemctl --user enable cliproxyapi.service
+    systemctl --user start cliproxyapi.service
+    ```
 
 ### Getting Help
 

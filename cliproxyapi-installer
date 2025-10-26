@@ -461,9 +461,15 @@ restore_config() {
 create_systemd_service() {
     local install_dir="$1"
     local service_file="${install_dir}/cliproxyapi.service"
+    local systemd_dir="$HOME/.config/systemd/user"
+    local systemd_service_file="${systemd_dir}/cliproxyapi.service"
     
     log_info "Creating systemd service file..."
     
+    # Create systemd user directory
+    mkdir -p "$systemd_dir"
+    
+    # Create minimal service file content (avoiding group permission issues)
     cat > "$service_file" << EOF
 [Unit]
 Description=CLIProxyAPI Service
@@ -471,25 +477,23 @@ After=network.target
 
 [Service]
 Type=simple
-User=$USER
 WorkingDirectory=$install_dir
 ExecStart=$install_dir/cli-proxy-api
 Restart=always
 RestartSec=10
-Environment=HOME=$HOME
-
-# Security settings
-NoNewPrivileges=true
-PrivateTmp=true
-ProtectSystem=strict
-ProtectHome=true
-ReadWritePaths=$install_dir
 
 [Install]
-WantedBy=multi-user.target
+WantedBy=default.target
 EOF
 
+    # Copy to systemd user directory
+    cp "$service_file" "$systemd_service_file"
+    
+    # Reload systemd daemon
+    systemctl --user daemon-reload || log_warning "Could not reload systemd daemon (this is normal on first run)"
+
     log_success "Systemd service file created: $service_file"
+    log_success "Systemd service installed: $systemd_service_file"
     log_info "To enable and start the service:"
     log_info "  systemctl --user enable cliproxyapi.service"
     log_info "  systemctl --user start cliproxyapi.service"
