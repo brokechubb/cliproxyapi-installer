@@ -457,6 +457,50 @@ restore_config() {
     fi
 }
 
+# Check if systemd service is running
+is_service_running() {
+    systemctl --user is-active --quiet cliproxyapi.service 2>/dev/null
+}
+
+# Stop systemd service if running
+stop_service() {
+    if is_service_running; then
+        log_info "Stopping CLIProxyAPI service..."
+        systemctl --user stop cliproxyapi.service
+        log_success "Service stopped"
+    else
+        log_info "Service is not running"
+    fi
+}
+
+# Start systemd service
+start_service() {
+    log_info "Starting CLIProxyAPI service..."
+    systemctl --user start cliproxyapi.service
+    
+    # Wait a moment and check if it started successfully
+    sleep 2
+    if is_service_running; then
+        log_success "Service started successfully"
+    else
+        log_warning "Service may not have started properly. Check with: systemctl --user status cliproxyapi.service"
+    fi
+}
+
+# Restart systemd service
+restart_service() {
+    log_info "Restarting CLIProxyAPI service..."
+    systemctl --user restart cliproxyapi.service
+    
+    # Wait a moment and check if it started successfully
+    sleep 2
+    if is_service_running; then
+        log_success "Service restarted successfully"
+    else
+        log_warning "Service may not have started properly. Check with: systemctl --user status cliproxyapi.service"
+    fi
+}
+
 # Create systemd service file
 create_systemd_service() {
     local install_dir="$1"
@@ -469,7 +513,7 @@ create_systemd_service() {
     # Create systemd user directory
     mkdir -p "$systemd_dir"
     
-    # Create minimal service file content (avoiding group permission issues)
+    # Create service file content with basic working configuration
     cat > "$service_file" << EOF
 [Unit]
 Description=CLIProxyAPI Service
@@ -481,6 +525,7 @@ WorkingDirectory=$install_dir
 ExecStart=$install_dir/cli-proxy-api
 Restart=always
 RestartSec=10
+Environment=HOME=$HOME
 
 [Install]
 WantedBy=default.target
@@ -517,20 +562,21 @@ setup_config() {
         log_success "Copied executable to ${INSTALL_DIR}/cli-proxy-api"
     fi
     
-    # If we have a backup, restore it
+    # PRIORITY 1: If we have a backup from this upgrade, restore it
     if [[ -n "$backup_file" && -f "$backup_file" ]]; then
         cp "$backup_file" "$config"
         log_success "Restored configuration from backup"
         return
     fi
     
-    # Check for existing config in main directory
+    # PRIORITY 2: Check for existing config in main directory (NEVER overwrite)
     if [[ -f "$config" ]]; then
-        log_success "Preserved existing configuration"
+        log_success "Preserved existing user configuration (config.yaml)"
+        log_info "User modifications are protected during upgrades"
         return
     fi
     
-    # Check for existing config in previous version directory
+    # PRIORITY 3: Check for existing config in previous version directory
     local current_version_dir
     current_version_dir=$(get_current_version_dir)
     if [[ -n "$current_version_dir" && -f "${current_version_dir}/config.yaml" ]]; then
@@ -539,7 +585,7 @@ setup_config() {
         return
     fi
     
-    # Copy from example if available
+    # PRIORITY 4: Only create from example if NO existing config found
     if [[ -f "$example_config" ]]; then
         cp "$example_config" "$config"
 
@@ -645,10 +691,17 @@ install_cliproxyapi() {
     local current_version
     current_version=$(get_current_version)
     local is_upgrade=false
+    local service_was_running=false
     
     if [[ "$current_version" != "none" ]]; then
         log_info "Current CLIProxyAPI version: $current_version"
         is_upgrade=true
+        
+        # Check if service is running before upgrade
+        if is_service_running; then
+            service_was_running=true
+            log_info "Service is currently running and will be restarted after upgrade"
+        fi
     else
         log_info "CLIProxyAPI not installed, performing fresh installation"
     fi
@@ -677,6 +730,11 @@ install_cliproxyapi() {
     if [[ "$is_upgrade" == true && "$current_version" == "$version" ]]; then
         log_success "CLIProxyAPI is already up to date (version $version)"
         return
+    fi
+    
+    # Stop service if running (for upgrades)
+    if [[ "$is_upgrade" == true ]] && is_service_running; then
+        stop_service
     fi
     
     # Backup existing configuration if upgrading
@@ -708,7 +766,7 @@ install_cliproxyapi() {
     # Make main executable executable
     chmod +x "${INSTALL_DIR}/cli-proxy-api"
     
-    # Create systemd service file
+    # Create/update systemd service file
     create_systemd_service "$INSTALL_DIR"
     
     # Write version file
@@ -717,16 +775,30 @@ install_cliproxyapi() {
     # Clean up old versions
     cleanup_old_versions "$version"
     
+    # Restart service if it was running before upgrade
+    if [[ "$is_upgrade" == true && "$service_was_running" == true ]]; then
+        restart_service
+    fi
+    
     # Success message
     if [[ "$is_upgrade" == true ]]; then
         log_success "CLIProxyAPI upgraded from $current_version to $version!"
         log_info "Installation directory: $INSTALL_DIR"
+        
+        if [[ "$service_was_running" == true ]]; then
+            log_info "Service has been restarted automatically"
+        elif is_service_running; then
+            log_info "Service is running"
+        else
+            log_info "To start the service: systemctl --user start cliproxyapi.service"
+        fi
         
         # Check if this is the first time setup (no existing config)
         if [[ ! -f "${INSTALL_DIR}/config.yaml" ]]; then
             show_authentication_info
             show_quick_start "$INSTALL_DIR"
         else
+            log_info "Your existing configuration has been preserved"
             log_info "To use CLIProxyAPI: cd $INSTALL_DIR && ./cli-proxy-api --help"
         fi
     else

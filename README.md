@@ -5,12 +5,13 @@ A comprehensive Linux installation script for [CLIProxyAPI](https://github.com/r
 ## Features
 
 - 🚀 **Automatic Installation** - Detects your Linux architecture and downloads the latest version
-- 🔄 **Seamless Upgrades** - Preserves your configuration during upgrades
+- 🔄 **Smart Upgrades** - Preserves your configuration and automatically manages systemd service during upgrades
 - 🔑 **API Key Management** - Automatically generates secure API keys
-- 🛡️ **Systemd Service** - Creates and manages systemd service files
+- 🛡️ **Systemd Service** - Creates and manages systemd service files with proper lifecycle management
 - 📊 **Status Monitoring** - Check installation status and configuration
 - 🧹 **Cleanup** - Automatically removes old versions (keeps latest 2)
 - 📚 **Documentation Management** - Built-in documentation tools
+- ⚡ **Zero-Downtime Updates** - Service is properly stopped and restarted during upgrades
 
 ## Quick Start
 
@@ -44,24 +45,26 @@ cd cliproxyapi-installer
    ```
 
 3. **Start the service**:
-    ```bash
-    # Direct execution
-    ./cli-proxy-api
+     ```bash
+     # Direct execution
+     ./cli-proxy-api
 
-    # Or as a systemd service
-    systemctl --user enable cliproxyapi.service
-    systemctl --user start cliproxyapi.service
-    systemctl --user status cliproxyapi.service
-    ```
+     # Or as a systemd service (recommended)
+     systemctl --user enable cliproxyapi.service
+     systemctl --user start cliproxyapi.service
+     systemctl --user status cliproxyapi.service
+     ```
 
 4. **Enable autostart on boot** (recommended):
-    ```bash
-    # Enable the service to start automatically on user login
-    systemctl --user enable cliproxyapi.service
-    
-    # Verify it's enabled
-    systemctl --user is-enabled cliproxyapi.service
-    ```
+     ```bash
+     # Enable the service to start automatically on user login
+     systemctl --user enable cliproxyapi.service
+     
+     # Verify it's enabled
+     systemctl --user is-enabled cliproxyapi.service
+     ```
+
+> **💡 Pro Tip**: The installer automatically manages the systemd service during upgrades. If the service is running when you upgrade, it will be gracefully stopped, updated, and restarted automatically.
 
 ## Usage
 
@@ -167,12 +170,21 @@ sudo dnf install curl wget tar
 
 ## Systemd Service
 
-The installer creates a systemd service file for easy management:
+The installer creates and manages a systemd service file for easy lifecycle management:
+
+### ✨ Smart Service Management
+
+The installer provides intelligent service handling during upgrades:
+
+- **Automatic Detection**: Detects if the service is running before upgrades
+- **Graceful Shutdown**: Safely stops the service before applying updates
+- **Auto-Restart**: Restarts the service after successful upgrades
+- **State Preservation**: Maintains the service's previous running state
 
 ### Basic Service Management
 
 ```bash
-# Enable the service (starts on boot)
+# Enable the service (starts on user login)
 systemctl --user enable cliproxyapi.service
 
 # Start the service
@@ -186,6 +198,29 @@ journalctl --user -u cliproxyapi.service -f
 
 # Stop the service
 systemctl --user stop cliproxyapi.service
+
+# Restart the service
+systemctl --user restart cliproxyapi.service
+```
+
+### Service Status During Upgrades
+
+When you run `./cliproxyapi-installer upgrade`, the installer will:
+
+1. **Check** if the service is currently running
+2. **Stop** the service gracefully if it's active
+3. **Apply** the upgrade (download, extract, update files)
+4. **Restart** the service if it was running before
+5. **Report** the final service status
+
+You'll see output like:
+```
+[INFO] Service is currently running and will be restarted after upgrade
+[INFO] Stopping CLIProxyAPI service...
+[SUCCESS] Service stopped
+...
+[INFO] Restarting CLIProxyAPI service...
+[SUCCESS] Service restarted successfully
 ```
 
 ### Autostart Configuration
@@ -287,6 +322,31 @@ ls -la ~/.config/systemd/user/cliproxyapi.service
     systemctl --user start cliproxyapi.service
     ```
 
+7. **Upgrade Service Issues**
+    ```bash
+    # If service doesn't restart after upgrade
+    systemctl --user status cliproxyapi.service
+    
+    # Check recent service logs
+    journalctl --user -u cliproxyapi.service -n 20
+    
+    # Manually restart if needed
+    systemctl --user restart cliproxyapi.service
+    ```
+
+8. **Configuration Protection Issues**
+    ```bash
+    # If your config was accidentally overwritten (should never happen)
+    # Check backup directory
+    ls -la ~/cliproxyapi/config_backup/
+    
+    # Restore from latest backup
+    cp ~/cliproxyapi/config_backup/config_YYYYMMDD_HHMMSS.yaml ~/cliproxyapi/config.yaml
+    
+    # Restart service after restoring
+    systemctl --user restart cliproxyapi.service
+    ```
+
 ### Getting Help
 
 ```bash
@@ -304,8 +364,9 @@ ls -la ~/.config/systemd/user/cliproxyapi.service
 
 - API keys are automatically generated using cryptographically secure random strings
 - Configuration files are stored in your home directory with standard permissions
-- The systemd service runs with security restrictions enabled
+- The systemd service runs with appropriate security restrictions
 - Backups of configuration are created automatically during upgrades
+- **User configurations are never overwritten** - your modifications are protected during upgrades
 
 ## Updates and Upgrades
 
@@ -319,11 +380,25 @@ The installer automatically checks for newer versions:
 ./cliproxyapi-installer
 ```
 
-During upgrades:
-- Your `config.yaml` file is preserved
-- Configuration backups are created automatically
-- Old versions are cleaned up (latest 2 versions kept)
-- Systemd service file is updated if needed
+### Smart Upgrade Process
+
+During upgrades, the installer provides intelligent service management:
+
+- **🔄 Service Management**: If the service is running, it's automatically stopped before upgrade and restarted afterward
+- **🛡️ Configuration Protection**: Your `config.yaml` file is **never overwritten** - user modifications are preserved
+- **💾 Automatic Backups**: Configuration backups are created automatically before any changes
+- **🧹 Version Cleanup**: Old versions are cleaned up (latest 2 versions kept)
+- **📋 Service Updates**: Systemd service file is updated if needed
+
+### Upgrade Behavior
+
+| Scenario | Service Action | Config Action |
+|----------|----------------|---------------|
+| Service running | Stop → Upgrade → Restart | Preserved with backup |
+| Service stopped | Upgrade only | Preserved with backup |
+| First install | N/A | Created from example with generated keys |
+
+> **🔒 Your configuration is safe**: The installer uses a priority system that always preserves existing user configurations over example files.
 
 ## Contributing
 
@@ -342,6 +417,27 @@ This installer script is released under the same license as CLIProxyAPI.
 - **CLIProxyAPI Documentation**: https://github.com/router-for-me/CLIProxyAPI
 - **Installer Issues**: https://github.com/brokechubb/cliproxyapi-installer/issues
 - **General Help**: Run `./cliproxyapi-installer --help`
+
+## Changelog
+
+### Recent Improvements
+
+#### ✅ **Smart Service Management**
+- **Automatic Service Detection**: Installer detects if CLIProxyAPI service is running before upgrades
+- **Graceful Service Handling**: Service is properly stopped before upgrade and restarted afterward
+- **State Preservation**: Service maintains its previous running state after upgrades
+- **Enhanced Logging**: Clear feedback about service status throughout the upgrade process
+
+#### ✅ **Enhanced Configuration Protection**
+- **Never Overwrite**: User-modified `config.yaml` files are never replaced during upgrades
+- **Priority System**: Clear hierarchy for configuration preservation (backup → existing → previous → example)
+- **Automatic Backups**: Configuration backups created before any upgrade operations
+- **User Notifications**: Clear messaging when user configurations are preserved
+
+#### ✅ **Improved Systemd Integration**
+- **Fixed Service File**: Resolved systemd service configuration issues
+- **Better Error Handling**: Improved service startup and restart reliability
+- **Simplified Security**: Removed problematic restrictions while maintaining security
 
 ---
 
