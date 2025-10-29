@@ -462,6 +462,48 @@ is_service_running() {
     systemctl --user is-active --quiet cliproxyapi.service 2>/dev/null
 }
 
+# Check if any CLIProxyAPI processes are running
+is_cliproxyapi_running() {
+    pgrep -f "cli-proxy-api" >/dev/null 2>&1
+}
+
+# Stop any running CLIProxyAPI processes
+stop_cliproxyapi_processes() {
+    local pids
+    pids=$(pgrep -f "cli-proxy-api" 2>/dev/null || true)
+    
+    if [[ -n "$pids" ]]; then
+        log_info "Stopping running CLIProxyAPI processes..."
+        echo "$pids" | while read -r pid; do
+            if [[ -n "$pid" ]]; then
+                kill "$pid" 2>/dev/null || true
+                log_info "Sent TERM signal to process $pid"
+            fi
+        done
+        
+        # Wait a moment for graceful shutdown
+        sleep 2
+        
+        # Check if any processes are still running and force kill if needed
+        local remaining_pids
+        remaining_pids=$(pgrep -f "cli-proxy-api" 2>/dev/null || true)
+        if [[ -n "$remaining_pids" ]]; then
+            log_warning "Some processes didn't stop gracefully, force killing..."
+            echo "$remaining_pids" | while read -r pid; do
+                if [[ -n "$pid" ]]; then
+                    kill -9 "$pid" 2>/dev/null || true
+                    log_info "Force killed process $pid"
+                fi
+            done
+            sleep 1
+        fi
+        
+        log_success "All CLIProxyAPI processes stopped"
+    else
+        log_info "No CLIProxyAPI processes are running"
+    fi
+}
+
 # Stop systemd service if running
 stop_service() {
     if is_service_running; then
@@ -732,9 +774,14 @@ install_cliproxyapi() {
         return
     fi
     
-    # Stop service if running (for upgrades)
-    if [[ "$is_upgrade" == true ]] && is_service_running; then
-        stop_service
+    # Stop service and processes if running (for upgrades)
+    if [[ "$is_upgrade" == true ]]; then
+        if is_service_running; then
+            stop_service
+        fi
+        if is_cliproxyapi_running; then
+            stop_cliproxyapi_processes
+        fi
     fi
     
     # Backup existing configuration if upgrading
